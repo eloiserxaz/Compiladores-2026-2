@@ -15,27 +15,33 @@
 module eventos_mod
   implicit none
 
+  ! Constantes que identificam os tipos de evento
   integer, parameter :: EV_CLIQUE = 1, EV_TECLA = 2, EV_TIMER = 3, &
                         EV_SAIR = 4, EV_REDIMENSIONAR = 5
 
+  ! Um evento = tipo + um dado extra (ex.: nome do botão clicado)
   type :: evento_t
     integer :: tipo
     character(len=20) :: dado = ""
   end type evento_t
 
-  ! Assinatura que todo manipulador de evento deve ter
+  ! Assinatura que todo manipulador de evento deve ter:
+  ! uma sub-rotina que recebe um evento.
   abstract interface
     subroutine manipulador(ev)
+      ! "import" traz o tipo evento_t para dentro da interface
       import :: evento_t
       type(evento_t), intent(in) :: ev
     end subroutine manipulador
   end interface
 
-  ! Ponteiro para procedimento guardado em um componente
+  ! Registro com um ponteiro para procedimento.
+  ! "nopass" = o objeto não é passado automaticamente como 1º argumento.
   type :: registro_t
     procedure(manipulador), pointer, nopass :: tratar => null()
   end type registro_t
 
+  ! Tabela de manipuladores: posição = tipo do evento
   type(registro_t) :: tabela(5)
 
 contains
@@ -43,6 +49,7 @@ contains
   ! Associa um manipulador a um tipo de evento
   subroutine registra(tipo, h)
     integer, intent(in) :: tipo
+    ! "h" é a sub-rotina que será guardada (callback)
     procedure(manipulador) :: h
     tabela(tipo)%tratar => h
   end subroutine registra
@@ -50,7 +57,9 @@ contains
   ! Despacha o evento para o manipulador registrado (se houver)
   subroutine despacha(ev)
     type(evento_t), intent(in) :: ev
+    ! há manipulador registrado para este tipo de evento?
     if (associated(tabela(ev%tipo)%tratar)) then
+      ! chama o manipulador guardado na tabela
       call tabela(ev%tipo)%tratar(ev)
     else
       print '(A,I0,A)', "[sem tratador] evento tipo ", ev%tipo, " ignorado"
@@ -59,9 +68,11 @@ contains
 
 end module eventos_mod
 
+! Módulo com os manipuladores concretos (o que fazer em cada evento)
 module tratadores_mod
   use eventos_mod
   implicit none
+  ! conta quantos cliques já ocorreram
   integer :: cliques = 0
 contains
 
@@ -81,6 +92,7 @@ contains
     print '(A,A)', "[TIMER] ", trim(ev%dado)
   end subroutine ao_tempo
 
+  ! Este manipulador não usa "ev" (por isso o aviso de argumento não usado)
   subroutine ao_sair(ev)
     type(evento_t), intent(in) :: ev
     print '(A)', "[SAIR] encerrando o laço de eventos"
@@ -93,6 +105,7 @@ program tratamento_eventos
   use tratadores_mod
   implicit none
 
+  ! fila com 7 eventos simulados
   type(evento_t) :: fila(7)
   integer :: i
 
@@ -102,7 +115,7 @@ program tratamento_eventos
   call registra(EV_TIMER, ao_tempo)
   call registra(EV_SAIR, ao_sair)
 
-  ! Fila de eventos simulada
+  ! Fila de eventos simulada: cada evento_t(tipo, dado) cria um evento
   fila = [evento_t(EV_CLIQUE, "botao OK"), &
           evento_t(EV_TECLA, "a"), &
           evento_t(EV_TIMER, "tick 1"), &
@@ -111,10 +124,11 @@ program tratamento_eventos
           evento_t(EV_SAIR, ""), &
           evento_t(EV_TECLA, "b")]
 
-  ! Laço de eventos
+  ! Laço de eventos: retira cada evento da fila e despacha
   print *, "=== Laço de eventos ==="
   do i = 1, size(fila)
     call despacha(fila(i))
+    ! ao receber SAIR, interrompe o laço (o último evento não é processado)
     if (fila(i)%tipo == EV_SAIR) exit
   end do
   print *, "Eventos não processados após SAIR:", size(fila) - i
